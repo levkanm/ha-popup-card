@@ -411,11 +411,46 @@ try {
 
     set hass(hass) {
       this._hass = hass;
-      if (this._triggerElement) this._triggerElement.hass = hass;
+      if (!this._triggerElement) return;
+
+      let previousGridOptions;
+      try {
+        previousGridOptions = JSON.stringify(this._triggerElement.getGridOptions?.());
+      } catch (_error) {
+        // 某些自定义卡片需要运行时上下文后才会提供网格尺寸信息。
+      }
+      this._triggerElement.hass = hass;
+
+      let nextGridOptions;
+      try {
+        nextGridOptions = JSON.stringify(this._triggerElement.getGridOptions?.());
+      } catch (_error) {
+        // 将状态更新与可选的尺寸接口解耦。
+      }
+      if (previousGridOptions !== undefined && nextGridOptions !== undefined
+        && previousGridOptions !== nextGridOptions) {
+        this._notifyCardUpdated();
+      }
+    }
+
+    _notifyCardUpdated() {
+      this.dispatchEvent(new CustomEvent('card-updated', {
+        bubbles: true,
+        composed: true
+      }));
     }
 
     get hass() {
       return this._hass;
+    }
+
+    set layout(layout) {
+      this._layout = layout;
+      if (this._triggerElement) this._triggerElement.layout = layout;
+    }
+
+    get layout() {
+      return this._layout;
     }
 
     setConfig(config) {
@@ -530,7 +565,13 @@ try {
       const renderVersion = (this._renderVersion || 0) + 1;
       this._renderVersion = renderVersion;
       if (this._triggerCardConfig) {
-        this.shadowRoot.innerHTML = `<div id="trigger-card"></div>`;
+        this.shadowRoot.innerHTML = `
+          <style>
+            :host { display: block; height: 100%; min-height: 0; }
+            #trigger-card { height: 100%; min-height: 0; }
+            #trigger-card > * { height: 100%; }
+          </style>
+          <div id="trigger-card"></div>`;
         const container = this.shadowRoot.getElementById('trigger-card');
         try {
           const helpers = await window.loadCardHelpers?.();
@@ -546,14 +587,11 @@ try {
           const triggerAction = this._popupTrigger === 'tap'
             ? (originalActionConfig || { action: 'more-info' })
             : { action: 'more-info' };
-          const runtimeTriggerConfig = nativeActionKey
-            ? {
-                ...this._triggerCardConfig,
-                [nativeActionKey]: triggerAction
-              }
-            : this._triggerCardConfig;
+          const runtimeTriggerConfig = { ...this._triggerCardConfig };
+          if (nativeActionKey) runtimeTriggerConfig[nativeActionKey] = triggerAction;
           this._triggerElement = await helpers.createCardElement(runtimeTriggerConfig);
           if (!this.isConnected || renderVersion !== this._renderVersion) return;
+          this._triggerElement.layout = this._layout;
           if (this._hass) this._triggerElement.hass = this._hass;
           container.appendChild(this._triggerElement);
           const openPopup = () => {
@@ -985,6 +1023,10 @@ try {
             document.addEventListener(eventName, handler, true);
             return [eventName, handler];
           });
+
+          // HA 可能在嵌套卡片及其 hass 状态准备就绪前已测量此包装区域。
+          // 重新构建一次分区，使其采用已初始化卡片的实时网格选项，而非初始回退尺寸。
+          this._notifyCardUpdated();
         } catch (error) {
           console.error('[popup_card] 创建触发卡失败:', error);
           container.textContent = '触发卡加载失败，请检查卡片配置。';
@@ -1001,10 +1043,48 @@ try {
 
     // 分区仪表盘使用此值确定卡片默认占位和布局编辑器允许的最小尺寸。
     getGridOptions() {
-      return {
+      const outerOptions = {
         columns: 6,
-        min_columns: 1
+        min_columns: 1,
       };
+      const explicitRows = this.config?.grid_options?.rows
+        ?? this._triggerCardConfig?.grid_options?.rows;
+      if (explicitRows !== undefined) {
+        const childOptions = this._triggerElement?.getGridOptions?.() || {};
+        return { ...outerOptions, ...childOptions, rows: explicitRows };
+      }
+
+      // 尽可能使用正在运行的子卡片实例。
+      const liveOptions = this._triggerElement?.getGridOptions?.();
+      if (liveOptions && typeof liveOptions === 'object') {
+        return { ...outerOptions, ...liveOptions };
+      }
+
+      // 触发卡片创建前，使用已配置的卡片实例作为初始回退，
+      // 并传入 hass，让依赖状态的卡片从一开始就能正确计算尺寸。
+      const cardType = this._triggerCardConfig?.type;
+      if (typeof cardType === 'string') {
+        const elementType = cardType.startsWith('custom:')
+          ? cardType.slice('custom:'.length)
+          : `hui-${cardType}-card`;
+        const CardClass = customElements.get(elementType);
+        if (CardClass?.prototype?.getGridOptions) {
+          try {
+            const card = document.createElement(elementType);
+            card.setConfig?.(this._triggerCardConfig);
+            if (this._hass) card.hass = this._hass;
+            card.layout = this._layout;
+            const childOptions = card.getGridOptions();
+            if (childOptions && typeof childOptions === 'object') {
+              return { ...outerOptions, ...childOptions };
+            }
+          } catch (_error) {
+            // 触发卡片可能需要运行时上下文；此时使用卡片自身尺寸，避免强制设定固定行高。
+          }
+        }
+      }
+
+      return outerOptions;
     }
 
     static getStubConfig() {
