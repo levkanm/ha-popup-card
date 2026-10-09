@@ -35,7 +35,7 @@ try {
         super();
         this.attachShadow({ mode: 'open' });
         this._config = {};
-        this._popup = { title: '', hide_border: false, hide_title_bar: false, mobile_sheet: false, takeover_click: true, click_exclude: '', jump_enabled: false, jump_path: '', cards: [] };
+        this._popup = { title: '', hide_border: false, hide_title_bar: false, mobile_sheet: false, mobile_sheet_position: 'bottom', takeover_click: true, click_exclude: '', jump_enabled: false, jump_path: '', cards: [] };
         this._triggerAction = 'tap';
         this._previewVersion = 0;
       }
@@ -111,6 +111,20 @@ try {
             { name: 'hide_title_bar', selector: { boolean: {} } },
             { name: 'mobile_sheet', selector: { boolean: {} } },
             {
+              name: 'mobile_sheet_position',
+              selector: {
+                select: {
+                  mode: 'dropdown',
+                  options: [
+                    { label: '底部', value: 'bottom' },
+                    { label: '居中', value: 'center' },
+                    { label: '顶部', value: 'top' }
+                  ]
+                }
+              },
+              visible: { field: 'mobile_sheet', value: true }
+            },
+            {
               name: 'popup_trigger',
               selector: {
                 select: {
@@ -132,7 +146,8 @@ try {
             title: '弹窗标题',
             hide_border: '隐藏边框',
             hide_title_bar: '隐藏标题栏',
-            mobile_sheet: '移动端使用上拉面板',
+            mobile_sheet: '移动端使用上拉弹窗',
+            mobile_sheet_position: '上拉弹窗位置',
             popup_trigger: '打开弹窗的操作',
             takeover_click: '接管点击操作',
             click_exclude: '额外排除区域（CSS 选择器，多个使用,号分隔）',
@@ -148,6 +163,7 @@ try {
             hide_border: this._popup.hide_border,
             hide_title_bar: this._popup.hide_title_bar,
             mobile_sheet: this._popup.mobile_sheet,
+            mobile_sheet_position: this._popup.mobile_sheet_position,
             popup_trigger: this._triggerAction,
             takeover_click: this._popup.takeover_click,
             click_exclude: this._popup.click_exclude,
@@ -237,6 +253,7 @@ try {
           hide_border: (popupConfig.hide_border ?? popupConfig.hide_header) === true,
           hide_title_bar: popupConfig.hide_title_bar === true,
           mobile_sheet: popupConfig.mobile_sheet === true,
+          mobile_sheet_position: ['center', 'top'].includes(popupConfig.mobile_sheet_position) ? popupConfig.mobile_sheet_position : 'bottom',
           takeover_click: popupConfig.takeover_click !== false,
           click_exclude: typeof popupConfig.click_exclude === 'string' ? popupConfig.click_exclude : '',
           jump_enabled: popupConfig.jump_enabled === true,
@@ -246,7 +263,7 @@ try {
         this._triggerAction = config.popup_trigger || config.popup?.trigger || 'tap';
         this._triggerConfig = config.popup ? config.card : null;
         if (this._form) {
-          const popupSettingsChanged = ['title', 'hide_border', 'hide_title_bar', 'mobile_sheet', 'takeover_click', 'click_exclude', 'jump_enabled', 'jump_path']
+          const popupSettingsChanged = ['title', 'hide_border', 'hide_title_bar', 'mobile_sheet', 'mobile_sheet_position', 'takeover_click', 'click_exclude', 'jump_enabled', 'jump_path']
             .some((key) => previousPopup?.[key] !== this._popup[key]) ||
             previousTriggerAction !== this._triggerAction;
           if (popupSettingsChanged) {
@@ -255,6 +272,7 @@ try {
               hide_border: this._popup.hide_border,
               hide_title_bar: this._popup.hide_title_bar,
               mobile_sheet: this._popup.mobile_sheet,
+              mobile_sheet_position: this._popup.mobile_sheet_position,
               popup_trigger: this._triggerAction,
               takeover_click: this._popup.takeover_click,
               click_exclude: this._popup.click_exclude,
@@ -377,6 +395,7 @@ try {
             hide_border: this._popup.hide_border,
             hide_title_bar: this._popup.hide_title_bar,
             mobile_sheet: this._popup.mobile_sheet,
+            mobile_sheet_position: this._popup.mobile_sheet_position,
             takeover_click: this._popup.takeover_click,
             click_exclude: this._popup.click_exclude,
             jump_enabled: this._popup.jump_enabled,
@@ -491,6 +510,7 @@ try {
         hide_border: this._popupConfig.hide_border ?? this._popupConfig.hide_header,
         hide_title_bar: this._popupConfig.hide_title_bar === true,
         mobile_sheet: this._popupConfig.mobile_sheet === true,
+        mobile_sheet_position: ['center', 'top'].includes(this._popupConfig.mobile_sheet_position) ? this._popupConfig.mobile_sheet_position : 'bottom',
         takeover_click: this._popupConfig.takeover_click !== false,
         click_exclude: typeof this._popupConfig.click_exclude === 'string' ? this._popupConfig.click_exclude : '',
         jump_enabled: this._popupConfig.jump_enabled === true,
@@ -611,6 +631,7 @@ try {
               hide_border: popup.hide_border,
               hide_title_bar: popup.hide_title_bar,
               mobile_sheet: popup.mobile_sheet,
+              mobile_sheet_position: popup.mobile_sheet_position,
               jump_enabled: popup.jump_enabled,
               jump_path: popup.jump_path
             });
@@ -1109,6 +1130,7 @@ try {
           hide_border: false,
           hide_title_bar: false,
           mobile_sheet: false,
+          mobile_sheet_position: 'bottom',
           takeover_click: false,
           click_exclude: '',
           jump_enabled: false,
@@ -1318,6 +1340,7 @@ try {
       // 检测是否为移动端
       const isMobile = window.innerWidth < 768;
       const mobileSheet = isMobile && options.mobile_sheet === true;
+      const mobileSheetPosition = ['center', 'top'].includes(options.mobile_sheet_position) ? options.mobile_sheet_position : 'bottom';
 
       // 弹窗内容为空时，在普通和无边框模式下都显示提示并可操作，
       // 不直接渲染空堆叠卡。
@@ -1352,7 +1375,6 @@ try {
         backdrop-filter: var(--ha-dialog-scrim-backdrop-filter, var(--dialog-backdrop-filter, none));
         ${mobileSheet ? 'touch-action: none;' : ''}
       `;
-
       if (mobileSheet) {
         // 遮罩上的触摸滚动默认会滚动页面底层；只拦截从遮罩开始的手势。
         overlay.addEventListener('touchmove', (event) => {
@@ -1383,8 +1405,6 @@ try {
           }
         }
       }
-
-      appendTarget.appendChild(overlay);
 
       // 创建弹窗容器
       const popup = document.createElement('div');
@@ -1563,13 +1583,15 @@ try {
         popup.style.setProperty('max-height', 'min(92dvh, 860px)', 'important');
         popup.style.setProperty('transform', 'translateY(0)');
         popup.style.setProperty('transform-origin', 'center bottom', 'important');
-        if (!hideBorder) {
-          popup.style.setProperty('background-color', 'var(--ha-dialog-surface-background, var(--card-background-color, var(--primary-background-color)))', 'important');
-        }
-        popup.style.setProperty('border-radius', hideBorder ? '0' : 'var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) 0 0', 'important');
+        popup.style.setProperty('background-color', 'var(--ha-dialog-surface-background, var(--card-background-color, var(--primary-background-color)))', 'important');
+        popup.style.setProperty('border-radius', 'var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) 0 0', 'important');
+        if (hideBorder) popup.style.setProperty('padding-top', '32px', 'important');
         popup.style.setProperty('padding-bottom', 'calc(12px + env(safe-area-inset-bottom, 0px))', 'important');
         popup.style.setProperty('transition', 'transform 220ms cubic-bezier(0.2, 0, 0, 1), top 220ms cubic-bezier(0.2, 0, 0, 1), height 220ms cubic-bezier(0.2, 0, 0, 1), max-height 220ms cubic-bezier(0.2, 0, 0, 1)', 'important');
         popup.style.setProperty('touch-action', 'auto', 'important');
+        if (mobileSheetPosition === 'center' || mobileSheetPosition === 'top') {
+          popup.style.setProperty('box-shadow', 'none', 'important');
+        }
 
         const handle = document.createElement('div');
         handle.className = 'popup-card-sheet-handle';
@@ -1610,10 +1632,9 @@ try {
           }
           return viewportHeight * 0.9;
         };
-        const floatingPopupTop = (naturalHeight, viewportHeight) => {
-          const floatingMax = floatingPopupMaxHeight(viewportHeight);
-          // 长内容直接展开到弹窗的高度上限
-          return Math.max(0, (viewportHeight - Math.min(naturalHeight, floatingMax)) / 2);
+        const floatingPopupTop = (viewportHeight) => {
+          const floatingMax = Math.min(viewportHeight, floatingPopupMaxHeight(viewportHeight));
+          return Math.max(0, (viewportHeight - floatingMax) / 2);
         };
         popup._floatingPopupTop = floatingPopupTop;
         const setSheetGeometry = (top, height) => {
@@ -1621,13 +1642,16 @@ try {
           popup.style.setProperty('bottom', 'auto', 'important');
           popup.style.setProperty('height', `${height}px`, 'important');
           popup.style.setProperty('max-height', `${height}px`, 'important');
+          popup.style.setProperty('background-color', 'var(--ha-dialog-surface-background, var(--card-background-color, var(--primary-background-color)))', 'important');
+          popup.style.setProperty('background-clip', 'padding-box', 'important');
           popup._sheetContent?.style.setProperty('max-height', `${Math.max(0, height - sheetChromeHeight())}px`, 'important');
         };
         popup._setSheetGeometry = setSheetGeometry;
         popup._refreshSheetHeight = () => {
           if (!popup.isConnected || !popup._sheetContent) return;
           const viewportHeight = sheetViewportHeight();
-          const maximumHeight = Math.min(viewportHeight * 0.92, 860);
+          const nextExpandedTop = floatingPopupTop(viewportHeight);
+          const maximumHeight = viewportHeight - nextExpandedTop;
           const chromeHeight = sheetChromeHeight();
           const contentHeight = Math.max(
             popup._sheetContent.scrollHeight,
@@ -1636,16 +1660,22 @@ try {
           const naturalHeight = contentHeight + chromeHeight;
           const minimumHeight = Math.min(maximumHeight, chromeHeight + 72);
           const nextHeight = Math.min(maximumHeight, Math.max(minimumHeight, naturalHeight));
-          const nextExpandedTop = floatingPopupTop(naturalHeight, viewportHeight);
           const expandedContentLimit = Math.max(0, viewportHeight - nextExpandedTop - chromeHeight);
           const overflowsAtMaximum = contentHeight > expandedContentLimit + 1;
           const expandedTopChanged = Math.abs(nextExpandedTop - popup._sheetExpandedTop) > 1;
-          const nextTop = Math.max(nextExpandedTop, viewportHeight - nextHeight);
-          const changed = Math.abs(nextHeight - popup._sheetCollapsedHeight) > 1 ||
+          const nextTop = mobileSheetPosition === 'top'
+            ? nextExpandedTop
+            : mobileSheetPosition === 'center'
+              ? Math.max(nextExpandedTop, (viewportHeight - nextHeight) / 2)
+              : Math.max(nextExpandedTop, viewportHeight - nextHeight);
+          const collapsedHeight = mobileSheetPosition === 'center' || mobileSheetPosition === 'top'
+            ? viewportHeight - nextTop
+            : nextHeight;
+          const changed = Math.abs(collapsedHeight - popup._sheetCollapsedHeight) > 1 ||
             Math.abs(nextTop - popup._sheetCollapsedTop) > 1;
           popup._sheetOverflowsAtMaximum = overflowsAtMaximum;
           popup._sheetExpandedTop = nextExpandedTop;
-          popup._sheetCollapsedHeight = viewportHeight - nextTop;
+          popup._sheetCollapsedHeight = collapsedHeight;
           popup._sheetCollapsedTop = nextTop;
           if (changed && !popup._popupSheetExpanded && !popup._sheetDragging) {
             popup._setSheetGeometry(popup._sheetCollapsedTop, popup._sheetCollapsedHeight);
@@ -1669,7 +1699,7 @@ try {
             ? sheetViewportHeight() - top
             : popup._sheetCollapsedHeight;
           setSheetGeometry(top, height);
-          popup.style.setProperty('border-radius', hideBorder ? '0' : 'var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) 0 0', 'important');
+          popup.style.setProperty('border-radius', 'var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) 0 0', 'important');
           popup.style.setProperty('transform', 'translateY(0)');
         };
         popup._sheetUserInteracted = false;
@@ -1717,13 +1747,16 @@ try {
           if (Math.abs(delta) > 6) sheetWasDragged = true;
           const viewportHeight = sheetViewportHeight();
           if (delta < 0 || dragWasExpanded && delta > 0 && !popup._sheetForcedExpanded) {
-            const nextTop = Math.max(
-              popup._sheetExpandedTop,
-              Math.min(popup._sheetCollapsedTop, dragBaseTop + delta)
-            );
-            setSheetGeometry(nextTop, viewportHeight - nextTop);
-            const excessDown = dragWasExpanded ? Math.max(0, dragBaseTop + delta - popup._sheetCollapsedTop) : 0;
-            popup.style.setProperty('transform', `translateY(${excessDown}px)`, 'important');
+            const collapsedTop = popup._sheetCollapsedTop;
+            const expandedTop = popup._sheetExpandedTop;
+            const collapsedHeight = popup._sheetCollapsedHeight;
+            const expandedHeight = viewportHeight - expandedTop;
+            const travel = Math.max(1, Math.max(collapsedTop - expandedTop, expandedHeight - collapsedHeight));
+            const progress = Math.max(0, Math.min(1, (dragWasExpanded ? 1 : 0) - delta / travel));
+            const nextTop = collapsedTop + (expandedTop - collapsedTop) * progress;
+            const nextHeight = collapsedHeight + (expandedHeight - collapsedHeight) * progress;
+            setSheetGeometry(nextTop, nextHeight);
+            popup.style.setProperty('transform', 'translateY(0)', 'important');
           } else {
             popup.style.setProperty('transform', `translateY(${delta}px)`, 'important');
           }
@@ -1873,17 +1906,25 @@ try {
       appendTarget.appendChild(popup);
       if (mobileSheet) {
         const viewportHeight = window.visualViewport?.height || window.innerHeight;
-        const maximumHeight = Math.min(viewportHeight * 0.92, 860);
+        const expandedTop = popup._floatingPopupTop(viewportHeight);
+        const maximumHeight = viewportHeight - expandedTop;
         const popupStyles = getComputedStyle(popup);
         const popupChrome = (Number.parseFloat(popupStyles.paddingTop) || 0) + (Number.parseFloat(popupStyles.paddingBottom) || 0);
         const contentHeight = Math.max(contentContainer.scrollHeight, contentContainer.getBoundingClientRect().height);
-        const measuredHeight = popup.getBoundingClientRect().height;
         const minimumHeight = Math.min(maximumHeight, popupChrome + 72);
         const naturalSheetHeight = contentHeight + popupChrome;
-        popup._sheetCollapsedHeight = Math.min(maximumHeight, Math.max(minimumHeight, measuredHeight, naturalSheetHeight));
-        popup._sheetExpandedTop = popup._floatingPopupTop(naturalSheetHeight, viewportHeight);
-        popup._sheetCollapsedTop = Math.max(popup._sheetExpandedTop, viewportHeight - popup._sheetCollapsedHeight);
-        popup._sheetCollapsedHeight = viewportHeight - popup._sheetCollapsedTop;
+        const naturalPanelHeight = mobileSheetPosition === 'center' || mobileSheetPosition === 'top'
+          ? Math.min(maximumHeight, Math.max(minimumHeight, naturalSheetHeight))
+          : Math.min(maximumHeight, Math.max(minimumHeight, popup.getBoundingClientRect().height, naturalSheetHeight));
+        popup._sheetExpandedTop = expandedTop;
+        popup._sheetCollapsedTop = mobileSheetPosition === 'top'
+          ? expandedTop
+          : mobileSheetPosition === 'center'
+            ? Math.max(expandedTop, (viewportHeight - naturalPanelHeight) / 2)
+            : Math.max(expandedTop, viewportHeight - naturalPanelHeight);
+        popup._sheetCollapsedHeight = mobileSheetPosition === 'center' || mobileSheetPosition === 'top'
+          ? viewportHeight - popup._sheetCollapsedTop
+          : naturalPanelHeight;
         popup._setSheetGeometry(popup._sheetCollapsedTop, popup._sheetCollapsedHeight);
         popup._refreshSheetHeight();
         if (typeof ResizeObserver === 'function') {
@@ -1898,6 +1939,9 @@ try {
           if (cardElement) popup._sheetResizeObserver.observe(cardElement);
         }
       }
+
+      // 先完成卡片尺寸测量，再显示遮罩和弹窗。
+      appendTarget.insertBefore(overlay, popup);
 
       // 模仿 HA 对话框动画，同时尊重系统的减少动态效果设置。
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
