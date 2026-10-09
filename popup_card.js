@@ -1600,6 +1600,22 @@ try {
           const styles = getComputedStyle(popup);
           return (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
         };
+        const floatingPopupMaxHeight = (viewportHeight) => {
+          const configured = getComputedStyle(popup).getPropertyValue('--ha-dialog-max-height').trim();
+          const match = configured.match(/^([\d.]+)\s*(dvh|vh|px)$/);
+          if (match) {
+            const amount = Number.parseFloat(match[1]);
+            if (match[2] === 'px') return amount;
+            return viewportHeight * amount / 100;
+          }
+          return viewportHeight * 0.9;
+        };
+        const floatingPopupTop = (naturalHeight, viewportHeight) => {
+          const floatingMax = floatingPopupMaxHeight(viewportHeight);
+          // 长内容直接展开到弹窗的高度上限
+          return Math.max(0, (viewportHeight - Math.min(naturalHeight, floatingMax)) / 2);
+        };
+        popup._floatingPopupTop = floatingPopupTop;
         const setSheetGeometry = (top, height) => {
           popup.style.setProperty('top', `${top}px`, 'important');
           popup.style.setProperty('bottom', 'auto', 'important');
@@ -1617,18 +1633,36 @@ try {
             popup._sheetContent.scrollHeight,
             popup._sheetContent.getBoundingClientRect().height
           );
+          const naturalHeight = contentHeight + chromeHeight;
           const minimumHeight = Math.min(maximumHeight, chromeHeight + 72);
-          const nextHeight = Math.min(maximumHeight, Math.max(minimumHeight, contentHeight + chromeHeight));
-          const nextTop = Math.max(popup._sheetExpandedTop, viewportHeight - nextHeight);
+          const nextHeight = Math.min(maximumHeight, Math.max(minimumHeight, naturalHeight));
+          const nextExpandedTop = floatingPopupTop(naturalHeight, viewportHeight);
+          const expandedContentLimit = Math.max(0, viewportHeight - nextExpandedTop - chromeHeight);
+          const overflowsAtMaximum = contentHeight > expandedContentLimit + 1;
+          const expandedTopChanged = Math.abs(nextExpandedTop - popup._sheetExpandedTop) > 1;
+          const nextTop = Math.max(nextExpandedTop, viewportHeight - nextHeight);
           const changed = Math.abs(nextHeight - popup._sheetCollapsedHeight) > 1 ||
             Math.abs(nextTop - popup._sheetCollapsedTop) > 1;
+          popup._sheetOverflowsAtMaximum = overflowsAtMaximum;
+          popup._sheetExpandedTop = nextExpandedTop;
           popup._sheetCollapsedHeight = viewportHeight - nextTop;
           popup._sheetCollapsedTop = nextTop;
           if (changed && !popup._popupSheetExpanded && !popup._sheetDragging) {
             popup._setSheetGeometry(popup._sheetCollapsedTop, popup._sheetCollapsedHeight);
           }
+          if (overflowsAtMaximum && !popup._popupSheetExpanded && !popup._sheetUserInteracted && !popup._sheetDragging) {
+            popup._sheetForcedExpanded = true;
+            setExpanded(true);
+            return;
+          }
+          if (expandedTopChanged && popup._popupSheetExpanded && !popup._sheetDragging) {
+            popup._setSheetGeometry(nextExpandedTop, viewportHeight - nextExpandedTop);
+          }
         };
-        const setExpanded = (expanded) => {
+        const setExpanded = (expanded, userInitiated = false) => {
+          if (userInitiated) popup._sheetUserInteracted = true;
+          if (expanded && popup._sheetOverflowsAtMaximum) popup._sheetForcedExpanded = true;
+          if (!expanded && userInitiated) popup._sheetForcedExpanded = false;
           popup._popupSheetExpanded = expanded;
           const top = expanded ? popup._sheetExpandedTop : popup._sheetCollapsedTop;
           const height = expanded
@@ -1638,6 +1672,7 @@ try {
           popup.style.setProperty('border-radius', hideBorder ? '0' : 'var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 16px)) 0 0', 'important');
           popup.style.setProperty('transform', 'translateY(0)');
         };
+        popup._sheetUserInteracted = false;
         let sheetWasDragged = false;
         handle.addEventListener('click', (event) => {
           if (sheetWasDragged) {
@@ -1645,12 +1680,12 @@ try {
             event.preventDefault();
             return;
           }
-          setExpanded(!popup._popupSheetExpanded);
+          setExpanded(!popup._popupSheetExpanded, true);
         });
         handle.addEventListener('keydown', (event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            setExpanded(!popup._popupSheetExpanded);
+            setExpanded(!popup._popupSheetExpanded, true);
           }
         });
 
@@ -1681,7 +1716,7 @@ try {
           const delta = clientY - dragStartY;
           if (Math.abs(delta) > 6) sheetWasDragged = true;
           const viewportHeight = sheetViewportHeight();
-          if (delta < 0 || dragWasExpanded && delta > 0) {
+          if (delta < 0 || dragWasExpanded && delta > 0 && !popup._sheetForcedExpanded) {
             const nextTop = Math.max(
               popup._sheetExpandedTop,
               Math.min(popup._sheetCollapsedTop, dragBaseTop + delta)
@@ -1709,7 +1744,9 @@ try {
           if (delta > 130) {
             // 保留拖动后的面板几何位置，再从剩余的下移距离接续关闭动画。
             const remainingOffset = wasExpanded
-              ? Math.max(0, dragBaseTop + delta - popup._sheetCollapsedTop)
+              ? popup._sheetForcedExpanded
+                ? delta
+                : Math.max(0, dragBaseTop + delta - popup._sheetCollapsedTop)
               : delta;
             popup.style.removeProperty('transition');
             popup.style.removeProperty('transform');
@@ -1719,7 +1756,15 @@ try {
             return;
           }
           popup.style.setProperty('transition', 'transform 220ms cubic-bezier(0.2, 0, 0, 1), top 220ms cubic-bezier(0.2, 0, 0, 1), height 220ms cubic-bezier(0.2, 0, 0, 1), max-height 220ms cubic-bezier(0.2, 0, 0, 1)', 'important');
-          setExpanded(wasExpanded && delta <= 55 ? true : !wasExpanded && delta < -55);
+          if (wasExpanded && popup._sheetForcedExpanded && delta > 0) {
+            setExpanded(true, true);
+            return;
+          }
+          const travelDistance = wasExpanded
+            ? Math.max(0, popup._sheetCollapsedTop - dragBaseTop)
+            : Math.max(0, dragBaseTop - popup._sheetExpandedTop);
+          const snapThreshold = Math.min(55, Math.max(12, travelDistance));
+          setExpanded(wasExpanded ? delta < snapThreshold : delta <= -snapThreshold, true);
         };
 
         popup.addEventListener('pointerdown', (event) => {
@@ -1826,16 +1871,17 @@ try {
 
       popup.appendChild(contentContainer);
       appendTarget.appendChild(popup);
-        if (mobileSheet) {
-          const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      if (mobileSheet) {
+        const viewportHeight = window.visualViewport?.height || window.innerHeight;
         const maximumHeight = Math.min(viewportHeight * 0.92, 860);
         const popupStyles = getComputedStyle(popup);
         const popupChrome = (Number.parseFloat(popupStyles.paddingTop) || 0) + (Number.parseFloat(popupStyles.paddingBottom) || 0);
         const contentHeight = Math.max(contentContainer.scrollHeight, contentContainer.getBoundingClientRect().height);
         const measuredHeight = popup.getBoundingClientRect().height;
         const minimumHeight = Math.min(maximumHeight, popupChrome + 72);
-        popup._sheetCollapsedHeight = Math.min(maximumHeight, Math.max(minimumHeight, measuredHeight, contentHeight + popupChrome));
-        popup._sheetExpandedTop = Math.max(16, viewportHeight * 0.05);
+        const naturalSheetHeight = contentHeight + popupChrome;
+        popup._sheetCollapsedHeight = Math.min(maximumHeight, Math.max(minimumHeight, measuredHeight, naturalSheetHeight));
+        popup._sheetExpandedTop = popup._floatingPopupTop(naturalSheetHeight, viewportHeight);
         popup._sheetCollapsedTop = Math.max(popup._sheetExpandedTop, viewportHeight - popup._sheetCollapsedHeight);
         popup._sheetCollapsedHeight = viewportHeight - popup._sheetCollapsedTop;
         popup._setSheetGeometry(popup._sheetCollapsedTop, popup._sheetCollapsedHeight);
