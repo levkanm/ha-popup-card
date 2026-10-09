@@ -5,9 +5,9 @@
 
 <img width="350" height="289" alt="1791468933903" src="https://github.com/user-attachments/assets/8e1a97c2-4e87-44c8-8f93-244e8bdcc685" />
 <br>
-<img width="350" height="337" alt="1791468851083" src="https://github.com/user-attachments/assets/a2b8028a-ed9a-4920-b14b-2f46bd1632c6" />
+<img width="350" height="514" alt="1791562167783" src="https://github.com/user-attachments/assets/7f5aa047-d154-46d6-8805-f37081507c95" />
 <br>
-<img width="350" height="454" alt="1791469043548" src="https://github.com/user-attachments/assets/d82f0598-d0bf-4300-aeb9-67baec20d7a6" />
+<img width="350" height="337" alt="1791468851083" src="https://github.com/user-attachments/assets/a2b8028a-ed9a-4920-b14b-2f46bd1632c6" />
 
 # 使用说明
 
@@ -37,6 +37,10 @@
 
   开启后隐藏标题文字和标题栏上的操作按钮
 
++ ##### 移动端使用上拉面板
+
+  开启后在移动端使用上拉菜单样式展示弹窗
+
 + ##### 打开弹窗的操作
 
   选择通过哪种手势打开弹窗：点击、长按、双击
@@ -61,7 +65,7 @@
 
   设置跳转按钮的跳转路径
 
-<img width="1023" height="891" alt="Snipaste_2026-10-08_18-36-33" src="https://github.com/user-attachments/assets/2cd9da0d-63ae-4981-8235-2ed49735343f" />
+<img width="922" height="879" alt="Snipaste_2026-10-10_00-16-34" src="https://github.com/user-attachments/assets/d51114f2-0fd8-4f56-b8f8-ffef9e099916" />
 
 ### 弹窗卡片
 
